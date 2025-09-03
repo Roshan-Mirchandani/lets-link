@@ -15,9 +15,11 @@ export default function ProfilePage(){
 
   useEffect(()=> {
     if(user) fetchProfile()
+    // if(user) handleSignOut()
   },[user])
 
   async function fetchProfile() {
+    console.log("user id", user?.id)
     setLoading(true)
     const { data, error } = await supabase
       .from('profiles')
@@ -39,7 +41,7 @@ export default function ProfilePage(){
 
 
   if (loading) return <p>Loading...(loading)</p>
-  if (!profile) return <p>Loading ...</p>
+  if (!profile) return <p>Loading profile ...</p>
 
   return (
     <div className="max-w-md mx-auto mt-20 space-y-6">

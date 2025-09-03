@@ -21,7 +21,7 @@ export default function GroupsPage(){
           .from("group_members")
           .select("groups(id,name)")
           .eq("user_id",user?.id)
-
+        console.log("gorup", data)
           if (error){
             console.error(error)
           } else {

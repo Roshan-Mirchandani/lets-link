@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useSupabaseClient, useUser  } from '@supabase/auth-helpers-react'
-import { useRouter} from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation' 
 import ProfileCard from '@/components/ProfileCard'
 
 export default function EditProfilePage() {
     const supabase = useSupabaseClient()
     const user = useUser()
     const router = useRouter()
+    const params = useSearchParams()
+    const nextUrl = params.get("next") || "/profile"
 
     const [firstName, setFirstName] = useState('')
     const [surname, setSurname] = useState('')
@@ -20,7 +22,6 @@ export default function EditProfilePage() {
     // Fetch profile on mount
     useEffect(() =>{
         if (user) fetchProfile()
-
         },[user])
     
     async function fetchProfile() {
@@ -65,7 +66,8 @@ export default function EditProfilePage() {
       setError('Failed to update profile')
       console.log("Failed to update pfp",error.message)
     } else {
-      router.push('/profile')
+      console.log("edit page", nextUrl)
+      router.push(nextUrl)
     }
     setLoading(false)
   }

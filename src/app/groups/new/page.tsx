@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from "react"
-import { useSupabaseClient,useUser } from "@supabase/auth-helpers-react"
+import { useSupabaseClient, useUser} from "@supabase/auth-helpers-react"
 import { useRouter } from "next/navigation"
 
 export default function NewGroup(){
@@ -10,13 +10,16 @@ export default function NewGroup(){
     const router = useRouter()
 
     const [groupName, setGroupName] = useState("")
-    const [loading,setLoading] = useState(true)
+    const [loading,setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    if (!user) return <p>Please log in to create a group</p>
+    if (!user) return <p>Please log in to create a group</p> 
 
     async function handleCreateGroup(e: React.FormEvent){
         e.preventDefault()
+
+        if (!user) return
+
         setLoading(true)
         setError(null)
 
@@ -34,7 +37,8 @@ export default function NewGroup(){
               .single()
 
             if (groupError) throw groupError
-
+            
+            console.log("group succesfully created, id is: ",group.id)
             // Insert into member table
             const {error : memberError} = await supabase
               .from("group_members")
@@ -42,7 +46,7 @@ export default function NewGroup(){
                 {
                     group_id : group.id,
                     user_id : user?.id,
-                    role : "member",
+                    role : "admin",
                 }
               ])
 
