@@ -2,13 +2,12 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSupabaseClient, useUser, useSession } from "@supabase/auth-helpers-react"
+import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react"
 import Link from "next/link"
 
 export default function JoinGroupPage() {
     const supabase = useSupabaseClient()
     const user = useUser()
-    const session = useSession()
     const router = useRouter()
     const params = useSearchParams()
     const token = params.get("token")
@@ -16,7 +15,6 @@ export default function JoinGroupPage() {
     const [status, setStatus] = useState<string>("Verifying invite...")
     const [loading, setLoading] = useState(true)
 
-    // const joiningRef = useRef(false)
 
     const joinUrl = `/groups/join?token=${encodeURIComponent(token || "")}`;
 
@@ -26,9 +24,6 @@ export default function JoinGroupPage() {
             setLoading(false)
             return
         }
-
-        // if (joiningRef.current) return
-        // joiningRef.current = true;
 
         if (user === undefined) return
 
@@ -98,7 +93,6 @@ export default function JoinGroupPage() {
                 router.push(`/groups/${invite.group_id}`);
             }   catch ( err: any) {
                 setStatus(err.message || "Failed to join group")
-                // joiningRef.current = false
             }
         })()
     }, [token, user, supabase, router, joinUrl])
