@@ -3,13 +3,11 @@
 import { useState } from "react"
 import { useSupabaseClient } from "@supabase/auth-helpers-react"
 import { Button } from "@/components/ui/button"
+import { InviteLinkButtonProps } from "@/types/supabase"
 import { toast } from "sonner"
 
-type InvitteLinkButtonProps = {
-    groupId : string
-}
 
-export default function InviteLinkButton({groupId} :InvitteLinkButtonProps ){
+export default function InviteLinkButton({groupId} :InviteLinkButtonProps ){
     const supabase = useSupabaseClient()
     const [loading, setLoading] = useState(false)
 

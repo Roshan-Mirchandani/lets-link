@@ -2,27 +2,16 @@
 
 import { useState, useEffect } from "react"
 import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react" 
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import LeaveGroupButton from "@/components/LeaveGroupButton"
 import InviteLinkButton from "@/components/InviteLinkButton"
-
-type Group = {
-  id: string
-  name: string
-  owner: string
-}
-
-type Member = {
-  user_id: string
-  role: string
-  first_name : string
-  surname : string
-  avatar_url :string
-}
+import { Button } from "@/components/ui/button"
+import { Group, Member } from "@/types/supabase"
 
 export default function GroupChat(){
     const supabase = useSupabaseClient()
     const user = useUser()
+    const router = useRouter()
     const params = useParams()
     const groupId = params.groupId
 
@@ -35,7 +24,7 @@ export default function GroupChat(){
     useEffect(()=>{
         if(!groupId) return
 
-        async function fetchGroupData () {
+        async function fetchGroupData() {
             try{
                 setLoading(true)
 
@@ -108,6 +97,17 @@ export default function GroupChat(){
 
             <LeaveGroupButton groupId={group.id} />
             <InviteLinkButton groupId={group.id} />
+            <Button 
+                onClick={()=>router.push(`/groups/${groupId}/plans/new`)}
+                className="mt-4"
+            >
+                Create New Plan
+            </Button>
+            <Button
+            onClick={()=>router.push(`/groups/${groupId}/plans`)}
+            >
+                View plans
+            </Button>
         </div>
     )
 }
