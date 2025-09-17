@@ -11,6 +11,12 @@ import {
     CardDescription, 
     CardFooter 
 } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import AvailabilityModal from "@/components/AddAvailabilityModal"
 import AvailabilityChart from "@/components/AvailabilityChart"
@@ -26,11 +32,13 @@ export default function PlanPage(){
 
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+
     const [members,setMembers] = useState<Member[]>([])
     const [memberAvailabilities, setMemberAvailabilities] = useState<any[]>([])
     const [userAvailability, setUserAvailability] = useState<Availability| null>(null)
     const [plan, setPlan] = useState<Plan | null>(null)
     const [modalOpen, setModalOpen] = useState(false)
+    const [interval, setInterval] = useState(3)
 
 
     useEffect(()=> {
@@ -43,7 +51,7 @@ export default function PlanPage(){
                 // 1. Fetch plan data
                 const { data: planData, error: planError } = await supabase
                 .from("plans")
-                .select("name, description, start_date, end_date")
+                .select("id, name, description, start_date, end_date")
                 .eq("id", planId)
                 .eq("group_id",groupId)
                 .single()
@@ -82,6 +90,11 @@ export default function PlanPage(){
         fetchPlanData()
     },[planId, supabase])
 
+    const getLabel = (val: number) => {
+      if (val === 24) return "1 day"
+      return `${val}h`
+    }
+
     if (loading) return <p>Loading plan...</p>
     if (error) return <p className="text-red-500">{error}</p>
     if (!plan) return <p>Plan not found</p>
@@ -99,7 +112,7 @@ export default function PlanPage(){
           <p>{plan.description || "No description available."}</p>
           <AvailabilityChart
             availabilities={memberAvailabilities}
-            interval={3}
+            interval={interval}
             planDetails={plan}
             members = {members}
           />
@@ -113,10 +126,23 @@ export default function PlanPage(){
         <AvailabilityModal
           open={modalOpen}
           onOpenChange={setModalOpen}
-          planId={planId}
-          startDate = {plan.start_date}
-          endDate = {plan.end_date}
+          planData={plan}
         />
+       <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline">Interval: {getLabel(interval)}</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-40" align="start">
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(1)}>1h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(2)}>2h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(3)}>3h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(4)}>4h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(6)}>6h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(12)}>12h</DropdownMenuItem>
+          <DropdownMenuItem className="py-2 text-sm" onClick={() => setInterval(24)}>1 day</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
         </CardFooter>
       </Card>
     </div>

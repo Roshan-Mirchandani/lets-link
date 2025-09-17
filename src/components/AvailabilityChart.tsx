@@ -1,180 +1,202 @@
 'use client'
 
-import { 
-    LineChart,Line,
-    XAxis, YAxis,
-    Tooltip, ResponsiveContainer, CartesianGrid
-} from "recharts"
-import { Availability, Plan, AvailabilityChartProps } from "@/types/supabase"
-import { differenceInDays, addDays, format } from "date-fns"
-import { useEffect } from "react"
+import { addHours, subHours, format, differenceInHours, max as dateMax, min as dateMin } from 'date-fns'
+import { AvailabilityChartProps } from "@/types/supabase"
+import { Slot } from '@/types/supabase'
+import { useEffect } from 'react'
 
 export default function AvailabilityChart({
     availabilities,
     interval,
     members,
     planDetails
-    
 }: AvailabilityChartProps){
+ 
+    const startDate = new Date(planDetails.start_date)
+    startDate.setHours(0,0,0,0) // set time to local midnight
+    const endDate =  new Date(planDetails.end_date)
+    endDate.setHours(0,0,0,0) // set time to local midnight
 
-    const generateIntervals = () => {
-        const start = new Date(planDetails.start_date)
-        const end = new Date(planDetails.end_date)
-        const labels: string[] = []
+    const bufferStart = subHours(startDate, interval)
+    // const bufferEnd = addHours(endDate, interval)
 
-        const totalDays = differenceInDays(end,start) + 1
+    // Generate slot: the sections of the graph
+    const totalHoursWithBuffer = differenceInHours(endDate, bufferStart)
+    const slots: Slot[] = []
 
-        for (let i = 0; i < totalDays; i++){
-            const day = addDays(start, i)
+    for(let i=0; i<=totalHoursWithBuffer; i+= interval){
+        const start = addHours(bufferStart, i)
+        const end = addHours(start, interval)
+    
+        slots.push({
+            start,
+            end,
+            day: format(start, 'EEE MMM dd'),
+            hour: format(start, 'HH:mm')
+        })
+    }
 
-            if ( interval === 24) {
-                labels.push(format(day,"yyyy-MM-dd"))
+    // Group them by day 
+    const slotsByDay: Record<string, Slot[]> = {}
+    slots.forEach((slot)=> {
+        if(!slotsByDay[slot.day]) slotsByDay[slot.day] = []
+        slotsByDay[slot.day].push(slot)
+    })
+
+    // console.log("yasss",availabilityRanges)
+
+    // For mergeAvailabilities()
+    const availabilitiesAsDates = availabilities.map((a)=>({
+        user_id: a.user_id,
+        start: new Date(`${a.day}T${a.start_time}`),
+        end: new Date(`${a.day}T${a.end_time}`)
+    }))
+
+    //
+    function mergedAvailabilities(availabilitiesAsDates: { user_id: string, start: Date, end: Date}[]) {
+        const sorted = [...availabilitiesAsDates].sort((a,b) => a.start.getTime() - b.start.getTime())
+        const merged: typeof sorted = []
+
+        for(const a of sorted) {
+            const last = merged[merged.length -1]
+            // repetition of code for if statements, factoring out whats common seems to break rendering
+            if(last && last.user_id === a.user_id && last.end >= a.start) {
+                last.end = new Date(Math.max(last.end.getTime(), a.end.getTime()))
+            } else if (last && last.user_id === a.user_id && last.end.getTime() + 60000 >= a.start.getTime()){ // 60000ms is 1 minute, enough to check the midnight case
+                console.log("across mignight connection")
+                last.end = new Date(Math.max(last.end.getTime(), a.end.getTime()))
             } else {
-                for (let h = 0; h <24; h+= interval){
-                    labels.push(`${format(day,"yyyy-MM-dd")} ${String(h).padStart(2,"0")}:00`)
-                }
+                merged.push({...a})
             }
         }
-        return labels
+        return merged
     }
 
-    function transformAvailabilities(
-        availabilities: Availability[], // raw Supabase rows
-        intervalLabelsIso : string[], // interval labels made my generateIntervals()
-        intervalLengthMs : number // interval length in ms, used for maths in function
-    ) {
-        // turn interval labels into date objects
-        const intervalLabels = intervalLabelsIso.map(dateStr => new Date(dateStr))
-        
-        // get an array with unique elements of all user ids 
-        const members = Array.from(new Set(availabilities.map(a => a.user_id)))
-
-        // for each member (with their availability shared) create a data set
-        return members.map(memberId => {
-            // loop over each interval
-            const dataPoints = intervalLabels.map(intervalStart => { // the beginning of the slot
-                const intervalEnd = new Date(intervalStart.getTime() + intervalLengthMs) // the end of the slot
-
-                const fraction = availabilities
-                  .filter(a => a.user_id === memberId) // only get current members (in loop) availabiity
-                  .map(a=> {
-                    // make javascript date time objects
-                    const start = new Date(`${a.day}T${a.start_time}`) 
-                    const end = new Date(`${a.day}T${a.end_time}`)
-                  
-                    const overlap = // math part
-                        Math.max (
-                            0, // ensures 0 as minimum (in case of no ovelap)
-                            Math.min(intervalEnd.getTime(), end.getTime()) - // takes the minimum time
-                              Math.max(intervalStart.getTime(), start.getTime()) // takes the maximum time
-                        ) / intervalLengthMs // to get the fraction
-
-                    return overlap
-                })
-                .reduce((max,val) => Math.max(max,val), 0) // reducer for multiple entries that overlapped
-                
-                return{
-                    interval: intervalStart.toISOString().slice(0,16), // timestamp till minutes
-                    available: fraction
-                }
-            })
-
-            return { memberId, data: dataPoints}
+    useEffect(()=>{
+        members.forEach((m)=>{
+            const ranges =  mergedAvailabilities(
+                availabilitiesAsDates.filter(a => a.user_id === m.user_id)
+                )
+            console.log("muuuurge", m.first_name, ranges)
         })
-    }
+    },[])
 
-    function prepareChartData(transformed: ReturnType<typeof transformAvailabilities>){
-        if (transformed.length === 0) return []
+    return (
+        <div className='overflow-x-scroll bg-white'>
+            {/* Grid template: 1 columns for names + N columns for slots */}
+            <div 
+                className={'grid'}
+                style = {{
+                    gridTemplateColumns: `150px repeat(${slots.length}, minmax(60px, 1fr))`
+                }}
+            >
+                {/* Outer Header : Dates*/}
+                <div className="sticky left-0 z-10 bg-white border-b border-r font-semibold text-sm flex items-center justify-center">
+                    Date
+                </div>
+                {/* DAYS */}
+                {Object.entries(slotsByDay).map(([day, daySlots], dayIdx, arr) => {
+                    const span = daySlots.length
+                    // If first or last group (buffers), render an empty spacer that still occupies the columns
+                    if (dayIdx === 0 || dayIdx === arr.length - 1) {
+                        return (
+                        <div
+                            key={`spacer-${day}`}
+                            className="border-b border-r bg-white"
+                            style={{ gridColumn: `span ${span}` }}
+                        />
+                        )
+                    }
 
-        const intervals = transformed[0].data.map(d => new Date(d.interval).getTime())
+                    // Normal day label spanning its slots
+                    return (
+                        <div
+                            key={day}
+                            className="border-b border-r text-center bg-gray-50 font-medium"
+                            style={{ gridColumn: `span ${span}` }}
+                        >
+                            {day}
+                        </div>
+                    )
+                })}
+                {/* Inner Header : Hours */}
+                <div
+                    className='sticky left-0 z-10 bg-white border-b border-r font-semibold text-sm flex items-center justify-center'
+                >
+                    Hours
+                </div>
 
-        return intervals.map((interval, idx) => {
-            const row: Record<string, any> = { interval }
-            transformed.forEach(memberData => {
-                row[memberData.memberId] = memberData.data[idx].available
-            })
-            return row
-        })
-    }
+                {/* HOURS */}
+                {slots.map((slot,idx)=> {
+                    if(idx ===0 ) { // buffer start remove time
+                        return <div key={`hour-spacer-${idx}`} className="border-b border-r bg-white" />
+                    }    
+                    // rest display as normal
+                    return (
+                        <div 
+                            key = {`hour-${idx}`}
+                            className="border-b border-r relative"
+                        >
+                            <span className="absolute -top-0 -translate-x-1/2 text-[10px] text-gray-600">
+                                {slot.hour}
+                            </span>
+                        </div>
+                    )   
+                })}
 
-    const intervalLabels =  generateIntervals() 
-    const intervalSize = interval * 60 * 60 * 1000
-    const transformedData =  transformAvailabilities(availabilities, intervalLabels, intervalSize)
-    const chartData = prepareChartData(transformedData)
-    console.log(chartData)
+                {/* MEMBER ROWS */}
+                {members.map((m) => (
+                    <div className='contents' key={m.user_id}>
+                        {/* User name */}
+                        <div className='sticky left-0 bg-white border-r flex items-center justify-center px-2 text-sm font-medium'>
+                            {m.first_name}
+                        </div>
+                        
+                        {/* Member BARS */}
+                        {
+                        slots.map((slot, idx) => {
+                            const mergedUserAvailabilities = mergedAvailabilities(
+                                availabilitiesAsDates.filter(a => a.user_id === m.user_id)
+                            )
 
+                            return (
+                                <div
+                                    key={`${m.user_id}-slot-${idx}`}
+                                    className="border-r h-12 relative bg-white"
+                                >
+                                    {mergedUserAvailabilities.map((a,i) =>{
+                                        const slotDuration = slot.end.getTime() - slot.start.getTime()
+                                        const overlapStart = dateMax([a.start, slot.start])
+                                        const overlapEnd = dateMin([a.end, slot.end])
+                                        const overlapMs = Math.max(0, overlapEnd.getTime() - overlapStart.getTime())
+                                        
+                                        if (overlapMs <= 0) return null
 
-   return (
-  <div className="w-full h-[400px] p-4 border rounded shadow-sm bg-white">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart
-        data={chartData}
-        margin={{ top: 50, right: 30, left: 60, bottom: 60 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" />
-
-        {/* X Axis bottom: show times */}
-        <XAxis
-          dataKey="interval"
-          type="number"
-          domain={['dataMin', 'dataMax']}
-          scale="time"
-          tickFormatter={(tick) => format(new Date(tick), 'HH:mm')}
-          tick={{ fontSize: 12 }}
-          height={40}
-          interval={0}
-        />
-
-        {/* Custom top X axis for dates */}
-        <XAxis
-          dataKey="interval"
-          type="number"
-          scale="time"
-          orientation="top"
-          tick={false}
-          axisLine={false}
-          domain={['dataMin', 'dataMax']}
-          height={30}
-          label={{ value: '', position: 'insideTop' }}
-        >
-          {chartData.map((d, i) => {
-            const dateStr = format(new Date(d.interval), 'dd/MM');
-            // Only label when date changes
-            if (i === 0 || format(new Date(chartData[i-1].interval), 'dd/MM') !== dateStr) {
-              return <text key={i} x={i * 50} y={0}>{dateStr}</text>;
-            }
-            return null;
-          })}
-        </XAxis>
-
-        {/* Y axis as users */}
-        <YAxis
-          type="category"
-          dataKey="memberNames" // map user IDs -> names in chartData
-          width={120}
-          tick={{ fontSize: 12 }}
-        />
-
-        <Tooltip
-          labelFormatter={(label) => format(new Date(label), 'dd/MM HH:mm')}
-          formatter={(value: number) => `${(value*100).toFixed(0)}%`}
-        />
-
-        {/* Lines per user */}
-        {members.map((user) => (
-          <Line
-            key={user.user_id}
-            type="monotone" // smooth line
-            dataKey={user.user_id}
-            stroke={`#${Math.floor(Math.random()*16777215).toString(16)}`}
-            dot={false}
-            isAnimationActive={false}
-          />
-        ))}
-
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-    )
-
+                                        const leftFrac = (overlapStart.getTime() - slot.start.getTime()) / slotDuration
+                                        const widthFrac=  overlapMs / slotDuration
+                                    
+                                        return (
+                                            <div
+                                                key ={`${m.user_id}-slot-${idx} - ${i}`}
+                                                className="absolute top-0 h-full bg-blue-500 opacity-70 group"
+                                                style={{
+                                                left: `${leftFrac * 100}%`,
+                                                width: `${widthFrac * 100}%`,
+                                                }}
+                                            >
+                                                {/* Tooltip */}
+                                                <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap shadow">
+                                                    {m.first_name}: {format(a.start, "HH:mm dd MMM")} - {format(a.end, "HH:mm dd MMM")}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )
+                        })}
+                    </div>
+                ))}
+            </div>
+        </div>
+  )
 }
