@@ -30,7 +30,7 @@ export default function NewCustomPreset({
 
             const { data , error } = await supabase
               .from("availability_presets")
-              .select("label, start_time, end_time")
+              .select("id, label, start_time, end_time")
               .eq("user_id", user.id)
 
               if (error) {
@@ -39,6 +39,7 @@ export default function NewCustomPreset({
               }
 
               setExistingPresets(data.map(p=>({
+                id: p.id,
                 label: p.label,
                 start: p.start_time,
                 end: p.end_time
@@ -96,7 +97,7 @@ export default function NewCustomPreset({
           setStart('')
           setEnd('')
           onOpenChange(false)
-          onSave(data)
+          onSave?.(data)
     }
 
     return (

@@ -1,12 +1,7 @@
-type ProfileCardProps = {
-    firstName : string,
-    surname : string,
-    email : string,
-    avatarUrl? : string
-}
+import { ProfileCardProps } from "@/types/supabase"
 
 export default function ProfileCard ({firstName, surname, email, avatarUrl} : ProfileCardProps){
-    return( 
+  return( 
     <div className="p-4 border rounded shadow">
       <img
         src={avatarUrl || '/default-avatar.jpg'}

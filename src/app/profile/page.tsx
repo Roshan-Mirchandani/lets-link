@@ -23,7 +23,7 @@ export default function ProfilePage(){
     setLoading(true)
     const { data, error } = await supabase
       .from('profiles')
-      .select('first_name, surname, email, avatar_url')
+      .select('first_name, surname, email, avatar_url, default_interval, time_format')
       .eq('id', user?.id)
       .single()
 
@@ -52,7 +52,12 @@ export default function ProfilePage(){
         surname={profile.surname}
         email={user?.email || ''}
         avatarUrl={profile.avatar_url}
+        
       />
+      <p> Time format: {profile.time_format}</p>
+      <p>
+        Default Interval: {profile.default_interval === '24h' ? '1 day' : `${profile.default_interval}h`}
+      </p>
 
       <button
         onClick={() => router.push('/profile/edit')}

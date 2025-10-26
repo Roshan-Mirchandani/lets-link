@@ -8,6 +8,7 @@ import { AvailabilityModalProps, PresetTimings } from "@/types/supabase"
 import { toast } from "sonner"
 import { generalPresets } from "@/lib/availabilityPresets"
 import { Check } from "lucide-react"
+import { format } from "date-fns"
 import NewCustomPreset from "./NewCustomPresetModal"
 
 export default function AvailabilityModal({ 
@@ -43,7 +44,7 @@ export default function AvailabilityModal({
       const end = new Date(endDate)
 
       let current = new Date(start)
-      console.log("mod ation", mode)
+      // console.log("mod ation", mode)
       if (mode === 'custom') {
         while (current <= end){
           const dayStr = current.toISOString().split("T")[0]
@@ -88,7 +89,9 @@ export default function AvailabilityModal({
             setError("Please fill in all fields")
             return  
           }
-          if (startTime >= endTime) {
+          const completeStartDate = new Date(`${startDate}T${startTime}`)
+          const completeEndDate = new Date(`${endDate}T${endTime}`)
+          if (completeStartDate >= completeEndDate) {
             toast.error("Start time must be before end time")
             return
           }
@@ -127,12 +130,25 @@ export default function AvailabilityModal({
           }
         }
 
-        console.log("slooootos", dailySlots)
+        // console.log("slooootos", dailySlots)
         setLoading(true)
         setError(null)
 
         try {
-          // Add mode: insert
+          // Edit : Find days to delete CHANGE MOST OF THE DELETE SECTION
+          if(existingAvailability) {
+            const rowsToDelete = existingAvailability.ids
+
+            const { error: deleteError} = await supabase
+              .from("plan_availability")
+              .delete()
+              .eq("user_id", user.id)
+              .eq("plan_id", planData.id)
+              .in("id", rowsToDelete) 
+
+            if (deleteError) throw deleteError
+          } 
+          // Add + Edit requires insert
           const { error: insertError } = await supabase
             .from("plan_availability")
             .insert(
@@ -142,12 +158,15 @@ export default function AvailabilityModal({
                 day: row.day, 
                 start_time: row.start_time,
                 end_time: row.end_time,
-                created_at: new Date(),
-                updated_at: new Date()
+                created_at: new Date()
               }))
             )
           if (insertError) throw insertError
           onOpenChange(false)
+          setStartDate("")
+          setEndDate("")
+          setStartTime("")
+          setEndTime("")
         } catch (err: any) {
             console.error(err)
             setError(err.message || "Failed to save availability")
@@ -156,6 +175,36 @@ export default function AvailabilityModal({
         }
     }
 
+    const handleDelete = async () =>{ 
+      if(!user) {
+        setError("You must be logged in to submit availability")
+        return
+      }
+      try {
+        if(existingAvailability){
+          const rowsToDelete = existingAvailability.ids
+
+          const { error: deleteError} = await supabase
+            .from("plan_availability")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("plan_id", planData.id)
+            .in("id", rowsToDelete) 
+
+          if (deleteError) throw deleteError
+
+          onOpenChange(false)
+          setStartDate("")
+          setEndDate("")
+          setStartTime("")
+          setEndTime("")
+        }
+      } catch (err: any) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    } 
     const togglePreset = (preset: PresetTimings) =>{
         const exists = selectedPresets.some(p => p.label === preset.label)
 
@@ -174,7 +223,7 @@ export default function AvailabilityModal({
 
           const { data , error } = await supabase
             .from("availability_presets")
-            .select("label, start_time, end_time")
+            .select("id, label, start_time, end_time")
             .eq("user_id", user.id)
 
             if (error) {
@@ -183,6 +232,7 @@ export default function AvailabilityModal({
             }
 
             setCustomPresets(data.map(p=>({
+              id: p.id,
               label: p.label,
               start: p.start_time,
               end: p.end_time
@@ -191,14 +241,56 @@ export default function AvailabilityModal({
           setLoading(false)
       }
       fetchCustomPresets()
-
     },[mode])
-
+    
+    // useEffect(()=>{
+    //   console.log('selected', existingAvailability)
+    // },[])
 
     // make sure if check box for end date is clicked, any changes to start date changes end date
     useEffect(()=>{
       if (endDateSameAsStart) setEndDate(startDate)
-    },[startDate])
+    },[startDate,endDateSameAsStart])
+
+    // default mode to custom for editing
+    useEffect(()=>{
+      if(existingAvailability) {
+        setMode("custom")
+      }
+    },[existingAvailability])
+
+    // default values when editing and resetting when adding
+    useEffect(()=>{
+      // console.log("availability in case", existingAvailability)
+      if (existingAvailability){
+        setStartDate(format(existingAvailability.start_date, "yyyy-MM-dd"))
+        setEndDate(format(existingAvailability.end_date, "yyyy-MM-dd"))
+        setStartTime(format(existingAvailability.start_date, "HH:mm"))
+        setEndTime(format(existingAvailability.end_date, "HH:mm"))
+         setEndDateSameAsStart(
+          format(existingAvailability.start_date, "yyyy-MM-dd") ===
+          format(existingAvailability.end_date, "yyyy-MM-dd")
+        )
+      } else {
+        // reset when adding new availability
+        setStartDate("")
+        setEndDate("")
+        setStartTime("")
+        setEndTime("")
+        setEndDateSameAsStart(false)
+      }
+    },[existingAvailability])
+
+    // reset states when modal closes
+    useEffect(() => {
+      if (!open) {
+        setStartDate("")
+        setEndDate("")
+        setStartTime("")
+        setEndTime("")
+        setEndDateSameAsStart(false)
+      }
+    }, [open])
 
     return ( 
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,6 +300,7 @@ export default function AvailabilityModal({
             </DialogHeader>
               {/* Button to switch between pages */}
               <div className="flex justify-between mt-4">
+                {existingAvailability === null ? 
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -217,6 +310,7 @@ export default function AvailabilityModal({
                 >
                   {page === 1 ? "Go to presets ->" : " <- Custom Time"}
                 </Button>
+                : null}
               </div>  
 
               <label className="block">
@@ -265,6 +359,7 @@ export default function AvailabilityModal({
                       className="w-full border rounded p-2 mt-1"
                       value={startTime}
                       onChange={(e) => setStartTime(e.target.value)}
+                      
                     />
                   </label>
 
@@ -347,12 +442,16 @@ export default function AvailabilityModal({
         </div>
 
         <DialogFooter className="mt-4 flex justify-end space-x-2">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
           <Button onClick={handleSave} disabled={loading}>
             {loading ? "Saving..." : "Save"}
           </Button>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button  className ="bg-red-600"onClick={handleDelete} disabled={loading}>
+            {loading ? "Deleting>.." : "Delete"}
+          </Button>
+
         </DialogFooter>
       </DialogContent>
     </Dialog>

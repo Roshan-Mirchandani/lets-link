@@ -1,16 +1,18 @@
 'use client'
 
 import { addHours, subHours, format, differenceInHours, max as dateMax, min as dateMin } from 'date-fns'
-import { AvailabilityChartProps } from "@/types/supabase"
-import { Slot } from '@/types/supabase'
+import { AvailabilityChartProps, Slot } from "@/types/supabase"
 import { useEffect } from 'react'
+import { useUser } from '@supabase/auth-helpers-react'
 
 export default function AvailabilityChart({
     availabilities,
     interval,
     members,
-    planDetails
+    planDetails,
+    onBarClick
 }: AvailabilityChartProps){
+    const user = useUser()
  
     const startDate = new Date(planDetails.start_date)
     startDate.setHours(0,0,0,0) // set time to local midnight
@@ -47,29 +49,50 @@ export default function AvailabilityChart({
 
     // For mergeAvailabilities()
     const availabilitiesAsDates = availabilities.map((a)=>({
+        id: a.id,
         user_id: a.user_id,
         start: new Date(`${a.day}T${a.start_time}`),
         end: new Date(`${a.day}T${a.end_time}`)
     }))
 
-    //
-    function mergedAvailabilities(availabilitiesAsDates: { user_id: string, start: Date, end: Date}[]) {
-        const sorted = [...availabilitiesAsDates].sort((a,b) => a.start.getTime() - b.start.getTime())
-        const merged: typeof sorted = []
+    // When rendered, filtered by user 
+    function mergedAvailabilities(availabilitiesAsDates: { id: string, user_id: string, start: Date, end: Date}[]) {
+        const sorted = [...availabilitiesAsDates].sort(
+            (a,b) => a.start.getTime() - b.start.getTime()
+        )
+
+        type MergedSlot = {
+            user_id: string
+            start: Date
+            end: Date
+            ids: string[] // keep track of the ids of the rows involved
+        }
+
+        const merged: MergedSlot[] = []
 
         for(const a of sorted) {
             const last = merged[merged.length -1]
-            // repetition of code for if statements, factoring out whats common seems to break rendering
-            if(last && last.user_id === a.user_id && last.end >= a.start) {
+            // KEEP AS IS. Repetition of code for if statements, factoring out whats common seems to break rendering
+            if( // one slot end =< one slot start (except for midnight case)
+                last && 
+                last.user_id === a.user_id && 
+                last.end >= a.start
+            ) {
                 last.end = new Date(Math.max(last.end.getTime(), a.end.getTime()))
-            } else if (last && last.user_id === a.user_id && last.end.getTime() + 60000 >= a.start.getTime()){ // 60000ms is 1 minute, enough to check the midnight case
-                console.log("across mignight connection")
+                last.ids.push(a.id)
+            } else if ( // the midnight case
+                last && 
+                last.user_id === a.user_id && 
+                last.end.getTime() + 60000 >= a.start.getTime() // 60000ms is 1 minute, enough to check the midnight case
+            ){  
+                // console.log("across mignight connection")
                 last.end = new Date(Math.max(last.end.getTime(), a.end.getTime()))
-            } else {
-                merged.push({...a})
+                last.ids.push(a.id)
+            } else { // no overlap, push and move on
+                merged.push({...a, ids: [a.id]})
             }
         }
-        return merged
+        return merged 
     }
 
     useEffect(()=>{
@@ -77,10 +100,11 @@ export default function AvailabilityChart({
             const ranges =  mergedAvailabilities(
                 availabilitiesAsDates.filter(a => a.user_id === m.user_id)
                 )
-            console.log("muuuurge", m.first_name, ranges)
+            // console.log("muuuurge", m.first_name, ranges)
         })
     },[])
 
+    if (!user) return <p>Please log in</p>
     return (
         <div className='overflow-x-scroll bg-white'>
             {/* Grid template: 1 columns for names + N columns for slots */}
@@ -183,10 +207,18 @@ export default function AvailabilityChart({
                                                 left: `${leftFrac * 100}%`,
                                                 width: `${widthFrac * 100}%`,
                                                 }}
+                                                onClick={() => {if(user.id === a.user_id) {
+                                                    onBarClick?.({user_id: m.user_id, start_date: a.start, end_date: a.end, ids: a.ids })}
+                                                }}
                                             >
                                                 {/* Tooltip */}
-                                                <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap shadow">
-                                                    {m.first_name}: {format(a.start, "HH:mm dd MMM")} - {format(a.end, "HH:mm dd MMM")}
+                                                <div className="absolute hidden group-hover:flex flex-col gap-1 bg-gray-800 text-white text-xs rounded px-2 py-1 -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap shadow">
+                                                    <span>
+                                                        {m.first_name}: {format(a.start, "HH:mm dd MMM")} - {format(a.end, "HH:mm dd MMM")}
+                                                    </span>
+                                                    {a.user_id === user?.id &&  (
+                                                        <span className='font-style: italic'>Edit/ Delete</span>
+                                                    )}
                                                 </div>
                                             </div>
                                         )

@@ -4,6 +4,13 @@ export type Group = {
   owner: string
 }
 
+export type ProfileCardProps = {
+  firstName : string,
+  surname : string,
+  email : string,
+  avatarUrl? : string
+}
+
 export type Member = {
   user_id: string
   role: string
@@ -36,7 +43,12 @@ export type AvailabilityModalProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     planData: Plan
-    existingAvailability?: Availability
+    existingAvailability?: {
+      user_id: string
+      start_date: Date
+      end_date: Date
+      ids: string [] 
+    } | null
 }
 
 export type AvailabilityChartProps = {
@@ -44,6 +56,12 @@ export type AvailabilityChartProps = {
     interval: number
     members : Member[]
     planDetails: Plan
+    onBarClick? : (availability : {
+      user_id: string
+      start_date: Date
+      end_date: Date
+      ids: string[] 
+    }) => void
 }
 
 export type InviteLinkButtonProps = {
@@ -58,6 +76,7 @@ export type Slot = {
 }
 
 export type PresetTimings = {
+  id?: string,
   label: string,
   start: string,
   end: string
@@ -66,5 +85,13 @@ export type PresetTimings = {
 export type NewCustomPresetModalProps = {
   open: boolean,
   onOpenChange: (open: boolean) => void,
-  onSave: (preset: PresetTimings) => void
+  onSave?: (preset: PresetTimings) => void
+}
+
+export type EditCustomPresetModalProps = {
+  selectedCustomPreset: PresetTimings,
+  allCustomPresets: PresetTimings[],
+  open: boolean,
+  onOpenChange: (open: boolean) => void,
+  onSave?: (preset: PresetTimings) => void
 }

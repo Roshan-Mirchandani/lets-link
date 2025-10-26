@@ -3,7 +3,18 @@
 import { useState, useEffect } from 'react'
 import { useSupabaseClient, useUser  } from '@supabase/auth-helpers-react'
 import { useRouter, useSearchParams } from 'next/navigation' 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Button } from '@/components/ui/button'
 import ProfileCard from '@/components/ProfileCard'
+import { PresetTimings } from '@/types/supabase'
+import NewCustomPreset from '@/components/NewCustomPresetModal'
+import EditCustomPresetModal from '@/components/EditCustomPresetModal'
 
 export default function EditProfilePage() {
     const supabase = useSupabaseClient()
@@ -16,19 +27,31 @@ export default function EditProfilePage() {
     const [surname, setSurname] = useState('')
     const [email, setEmail] = useState('')
     const [avatarUrl, setAvatarUrl] = useState('')
+
+    const [defaultInterval, setDefaultInterval] = useState('')
+    const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('24h')
+
+    const [customPresets, setCustomPresets] = useState<PresetTimings[]>([])
+    const [selectedPreset, setSelectedPreset] = useState<PresetTimings>()
+    const [openNewCustomPresetModal, setOpenNewCustomPresetModal] = useState(false)
+    const [openEditCustomPresetModal, setOpenEditCustomPresetModal] = useState(false)
+
     const[loading, setLoading] = useState(true)
     const[error, setError] = useState<string|null>(null)
 
     // Fetch profile on mount
     useEffect(() =>{
-        if (user) fetchProfile()
-        },[user])
+        if (user) {
+          fetchProfile()
+          fetchCustomPresets()
+        }
+    },[user,openNewCustomPresetModal])
     
     async function fetchProfile() {
-       setLoading(true) 
-       const { data, error } = await supabase
+      setLoading(true) 
+      const { data, error } = await supabase
        .from('profiles')
-       .select('first_name, surname,email, avatar_url')
+       .select('first_name, surname,email, avatar_url, default_interval, time_format')
        .eq('id',user?.id)
        .single()
 
@@ -40,8 +63,29 @@ export default function EditProfilePage() {
             setSurname(data.surname || '')
             setAvatarUrl(data.avatar_url || '')
             setEmail(data.email || '')
+            setTimeFormat(data.time_format || '')
+            setDefaultInterval(data.default_interval || '')
         }
         setLoading(false)
+    }
+
+    async function fetchCustomPresets() {
+      setLoading(true)
+      const {data, error} = await supabase
+       .from('availability_presets')
+       .select("id, label, start_time, end_time")
+       .eq("user_id", user?.id)
+
+       if (error) return
+
+      setCustomPresets(data.map(p=>({
+        id: p.id,
+        label: p.label,
+        start: p.start_time,
+        end: p.end_time
+      })))
+
+    setLoading(false)
     }
     
     // Handle save
@@ -58,19 +102,21 @@ export default function EditProfilePage() {
             surname : surname,
             email: email,
             avatar_url: avatarUrl,
-            updated_at : new Date()
+            updated_at : new Date(),
+            time_format: timeFormat,
+            default_interval: defaultInterval
         })
 
-    if (error){ 
-      setError(error.message)
-      setError('Failed to update profile')
-      console.log("Failed to update pfp",error.message)
-    } else {
-      console.log("edit page", nextUrl)
-      router.push(nextUrl)
+      if (error){ 
+        setError(error.message)
+        setError('Failed to update profile')
+        console.log("profile update error", error)
+      } else {
+        console.log("edit page", nextUrl)
+        router.push(nextUrl)
+      }
+      setLoading(false)
     }
-    setLoading(false)
-  }
 
     // Handle avatar upload
     async function handleAvatarUpload (e : React.ChangeEvent<HTMLInputElement>){
@@ -108,7 +154,7 @@ export default function EditProfilePage() {
       }
 
     }
-
+      // console.log("testing", selectedPreset)
     if (loading && !firstName && !surname) return <p>Loading profile...</p>
 
     return(
@@ -124,6 +170,7 @@ export default function EditProfilePage() {
       />
 
       <div className="mt-6 space-y-4">
+        <p>Name</p>
         <input
           className="w-full p-2 border rounded"
           type="text"
@@ -139,6 +186,8 @@ export default function EditProfilePage() {
           onChange={(e) => setSurname(e.target.value)}
         />
 
+        <p>Profile Picture</p>
+
         <input
           type="file"
           accept="image/*"
@@ -146,6 +195,85 @@ export default function EditProfilePage() {
           className="block"
         />
 
+        <p>Preferences</p>
+        <p>Time Format</p>
+        <Select 
+          value={timeFormat} 
+          onValueChange={(value) => setTimeFormat(value as "12h" | "24h")}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder= "Select Time Format"/>
+          </SelectTrigger>
+           <SelectContent>
+            <SelectItem value="24h">24h</SelectItem>
+            <SelectItem value="12h">12h</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        <p>Default Time Interval</p>
+        <Select
+          value = {String(defaultInterval)} // supabase saves as an int, this is so the value boolean works
+          onValueChange={setDefaultInterval}
+        >
+          <SelectTrigger className='w-full'>
+            <SelectValue placeholder = "Select Default Interval"/>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value = "24">1 day</SelectItem>
+            <SelectItem value = "12">12h</SelectItem>
+            <SelectItem value = "6">6h</SelectItem>
+            <SelectItem value = "4">4h</SelectItem>
+            <SelectItem value = "3">3h</SelectItem>
+            <SelectItem value = "2">2h</SelectItem>
+            <SelectItem value = "1">1h</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <p>Preset Managements</p>
+        <Button
+          // variant="outline" 
+          onClick={() => setOpenNewCustomPresetModal(true)}
+        > + </Button>
+
+
+        <NewCustomPreset 
+        open = {openNewCustomPresetModal}
+        onOpenChange={setOpenNewCustomPresetModal}
+        />
+
+      { selectedPreset &&
+        <EditCustomPresetModal 
+          selectedCustomPreset={selectedPreset}
+          allCustomPresets={customPresets}
+          open = {openEditCustomPresetModal}
+          onOpenChange={setOpenEditCustomPresetModal}
+        />}
+        
+        {customPresets.length > 0 && (
+          <>
+            <p className="font-medium mt-4">My Presets</p>
+            <div className="space-y-2">
+              {customPresets.map((preset) => {
+                // const isSelected = selectedPresets.some(p => p.label === preset.label)
+                return (
+                <Button
+                  key={preset.label}
+                  // variant={isSelected ? "outline" : "default"}
+                  // className={`w-full ${selectedPresets.some(p => p.label === preset.label) ? "bg-blue-100" : ""}`}
+                  onClick={()=>  {
+                    setSelectedPreset(preset)
+                    setOpenEditCustomPresetModal(true)
+                  }}
+                >
+                    <span>
+                    {preset.label} ({preset.start}-{preset.end})
+                  </span>
+                </Button>
+              )})
+            }
+            </div>
+          </>
+        )}
         {error && <p className="text-red-600">{error}</p>}
 
         <button

@@ -39,7 +39,41 @@ export default function PlanPage(){
     const [plan, setPlan] = useState<Plan | null>(null)
     const [modalOpen, setModalOpen] = useState(false)
     const [interval, setInterval] = useState(3)
+    const [selectedAvailability, setSelectedAvailability] = useState<{
+      user_id: string
+      start_date: Date
+      end_date: Date
+      ids: string[]
+    } | null>(null)
 
+
+    useEffect(()=>{
+      if(!user) return
+
+      async function fetchPreferences(userId: string) {
+        try{
+              setLoading(true)
+
+              const {data: preferencesData, error: prefencesError} = await supabase
+                .from("profiles")
+                .select("id, default_interval, time_format")
+                .eq("id", userId)
+                .single()
+
+                if (prefencesError) throw prefencesError
+                setInterval(preferencesData.default_interval)
+                console.log(preferencesData.default_interval)
+        } catch (err: any){
+          setError(err.message)
+        } finally{
+          setLoading(false)
+        }
+      }
+
+      fetchPreferences(user.id)
+      console.log(interval)
+
+    },[user, supabase])
 
     useEffect(()=> {
         if(!planId) return
@@ -67,28 +101,41 @@ export default function PlanPage(){
 
                   if (availabilityError) throw availabilityError
                   setMemberAvailabilities(availabilityData || [])
-                  console.log("huh",availabilityData, memberAvailabilities)
+                  // console.log("huh",availabilityData, memberAvailabilities)
 
                   // 3. Fetch Members 
                   const { data : member_profiles, error : memberError} = await supabase
-                .from('group_members_with_profiles')
-                .select('user_id, role, first_name, surname, avatar_url')
-                .eq('group_id', groupId) // Use group data to filter through view
+                  .from('group_members_with_profiles')
+                  .select('user_id, role, first_name, surname, avatar_url')
+                  .eq('group_id', groupId) // Use group data to filter through view
 
-                if (memberError) throw memberError
-                setMembers(member_profiles)
+                  if (memberError) throw memberError
+                  setMembers(member_profiles)
 
             } catch(err: any) {
-                console.error(err)
+                console.error(err.message)
                 setError(err)
 
             } finally {
                 setLoading(false)
             }
         }
-
         fetchPlanData()
     },[planId, supabase])
+
+    const handleBarClick = (bar: { user_id: string; start_date: Date; end_date: Date, ids: string[] }) =>{
+      setSelectedAvailability(bar)
+      setModalOpen(true)
+    }
+
+    const handleAddClick = () =>{
+      setSelectedAvailability(null)
+      setModalOpen(true)
+    }
+
+    // useEffect(()=>{
+    //   console.log("selected", selectedAvailability)
+    // },[selectedAvailability])
 
     const getLabel = (val: number) => {
       if (val === 24) return "1 day"
@@ -115,18 +162,20 @@ export default function PlanPage(){
             interval={interval}
             planDetails={plan}
             members = {members}
+            onBarClick={handleBarClick}
           />
         </CardContent>
         <CardFooter>
           <Button
-            onClick={() => setModalOpen(true) }
+            onClick={handleAddClick}
           >
-            Add / Edit My Availability
+            Add My Availability
           </Button>
         <AvailabilityModal
           open={modalOpen}
           onOpenChange={setModalOpen}
           planData={plan}
+          existingAvailability={selectedAvailability}
         />
        <DropdownMenu>
         <DropdownMenuTrigger asChild>
